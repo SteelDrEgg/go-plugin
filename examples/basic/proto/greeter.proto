@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package greeter;
+
+option go_package = "example.com/my-go-plugin-example/proto";
+
+message GreetRequest {
+  string name = 1;
+}
+
+message GreetReply {
+  string message = 1;
+}
+
+message PrefixRequest {
+  string text = 1;
+}
+
+message PrefixReply {
+  string text = 1;
+}
+
+// go:plugin type=plugin version=1
+service Greeter {
+  rpc SayHello(GreetRequest) returns (GreetReply);
+}
+
+// go:plugin type=host
+service HostFunctions {
+  rpc Prefix(PrefixRequest) returns (PrefixReply);
+}

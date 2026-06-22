@@ -1,0 +1,7 @@
+**/venv
+**/go.sum
+
+**/dist/*
+**/tmp/*
+**/*.pb.go
+**/*pb2*.py
