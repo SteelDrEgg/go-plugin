@@ -42,6 +42,7 @@ func (m *Manager) Load(path string) (*Handle, error) {
 		client:   loadRes.client,
 		info:     info,
 		plugin:   path,
+		root:     pluginRoot,
 		tmpRoot:  tmpRoot,
 		cleanup:  loadRes.cleanup,
 		unloader: removeDir,

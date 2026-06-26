@@ -20,6 +20,14 @@ message PrefixReply {
   string text = 1;
 }
 
+message ReadFileRequest {
+  string path = 1;
+}
+
+message ReadFileReply {
+  bytes data = 1;
+}
+
 // go:plugin type=plugin version=1
 service Greeter {
   rpc SayHello(GreetRequest) returns (GreetReply);
@@ -28,4 +36,5 @@ service Greeter {
 // go:plugin type=host
 service HostFunctions {
   rpc Prefix(PrefixRequest) returns (PrefixReply);
+  rpc ReadFile(ReadFileRequest) returns (ReadFileReply);
 }

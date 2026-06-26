@@ -57,5 +57,5 @@ go run ./host
 [python grpc] hello from python grpc plugin: python grpc
 
 ===== Current Plugin: WasmGreeter =====
-[golang wasm] hello from wasm plugin: [host] golang wasm
+[golang wasm] hello from wasm plugin: [host] golang wasm | file: hello from wasm resource
 ```

@@ -1,6 +1,6 @@
 PROTOC_GEN_GO := $(shell go env GOPATH)/bin/protoc-gen-go
 PROTOC_GEN_GO_GRPC := $(shell go env GOPATH)/bin/protoc-gen-go-grpc
-#PROTOC_GEN_GO_PLUGIN ?= $(abspath ../../go-plugin_0.9.0_darwin-amd64/protoc-gen-go-plugin)
+PROTOC_GEN_GO_PLUGIN ?= $(abspath ../../go-plugin_0.9.0_darwin-amd64/protoc-gen-go-plugin)
 PYTHON_VENV ?= ./python_plugin/venv
 PYTHON_GRPC_TOOLS ?= $(PYTHON_VENV)/bin/python
 PYTHON_RUNTIME := $(abspath $(PYTHON_GRPC_TOOLS))
@@ -57,6 +57,7 @@ package-wasm: wasm
 	mkdir -p dist
 	rm -rf ./dist/wasm_pkg && mkdir -p ./dist/wasm_pkg/Content
 	cp ./dist/greeter.wasm ./dist/wasm_pkg/Content/greeter.wasm
+	cp ./wasm_plugin/greet.txt ./dist/wasm_pkg/Content/greet.txt
 	printf 'Name: com.example/greeter-wasm\nVersion: 1.0.0\nType: wasm\nContractVersion: 1\nCommand: $$PLUGIN_ROOT/greeter.wasm\nDisplayName: WasmGreeter\nCategory: basic-example\n' > ./dist/wasm_pkg/info.yaml
 	cd ./dist/wasm_pkg && zip -qr ../greeter_wasm.plg .
 	rm -rf ./dist/wasm_pkg

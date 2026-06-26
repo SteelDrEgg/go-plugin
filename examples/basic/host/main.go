@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"google.golang.org/grpc"
 	"os"
+	"sync"
 
 	wasmpb "example.com/my-go-plugin-example/api/wasm/proto"
 
@@ -23,6 +24,8 @@ var handshake = goplugin.HandshakeConfig{
 	MagicCookieKey:   "GREETER_GRPC_PLUGIN",
 	MagicCookieValue: "hello",
 }
+
+var currentWasmHandle = newWasmHandleStore()
 
 func main() {
 	ctx := context.Background()
@@ -83,6 +86,8 @@ func callWasmPlugin(ctx context.Context, mgr *goplugin.Manager) error {
 		return fmt.Errorf("load wasm plugin: %w", err)
 	}
 	defer mgr.Unload(handle)
+	currentWasmHandle.Set(handle)
+	defer currentWasmHandle.Set(nil)
 
 	fmt.Println("===== Current Plugin:", handle.Info().Metadata["DisplayName"], "=====")
 
@@ -119,4 +124,37 @@ func (hostFunctions) Prefix(_ context.Context, req *wasmpb.PrefixRequest) (*wasm
 	return &wasmpb.PrefixReply{
 		Text: "[host] " + req.GetText(),
 	}, nil
+}
+
+func (hostFunctions) ReadFile(_ context.Context, req *wasmpb.ReadFileRequest) (*wasmpb.ReadFileReply, error) {
+	handle := currentWasmHandle.Get()
+	if handle == nil {
+		return nil, fmt.Errorf("wasm plugin handle is not ready")
+	}
+	data, err := handle.ReadFile(req.GetPath())
+	if err != nil {
+		return nil, err
+	}
+	return &wasmpb.ReadFileReply{Data: data}, nil
+}
+
+type wasmHandleStore struct {
+	mu     sync.RWMutex
+	handle *goplugin.Handle
+}
+
+func newWasmHandleStore() *wasmHandleStore {
+	return &wasmHandleStore{}
+}
+
+func (s *wasmHandleStore) Set(h *goplugin.Handle) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.handle = h
+}
+
+func (s *wasmHandleStore) Get() *goplugin.Handle {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.handle
 }

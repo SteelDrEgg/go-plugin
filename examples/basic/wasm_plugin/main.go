@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 
 	wasmgreeter "example.com/my-go-plugin-example/api/wasm/proto"
 )
@@ -22,7 +23,17 @@ func (wasmGreeter) SayHello(ctx context.Context, req *wasmgreeter.GreetRequest) 
 	if err != nil {
 		return nil, err
 	}
+
+	fileReply, err := hostFns.ReadFile(ctx, &wasmgreeter.ReadFileRequest{Path: "/greet.txt"})
+	if err != nil {
+		return nil, err
+	}
+
 	return &wasmgreeter.GreetReply{
-		Message: "hello from wasm plugin: " + prefixed.GetText(),
+		Message: fmt.Sprintf(
+			"hello from wasm plugin: %s | file: %s",
+			prefixed.GetText(),
+			string(fileReply.GetData()),
+		),
 	}, nil
 }

@@ -124,3 +124,19 @@ resp, _ := client.Hello(ctx, &pb.<Params>{To: "World"})
 fmt.Printf("Hello %s", resp.<GetMessage>())
 ```
 
+### Read plugin resources
+
+Each loaded plugin has a `Content` root directory. `Handle` can map resource addresses
+to this root, so callers can expose a simple read API to plugins.
+
+```go
+// Both forms are supported:
+// - "/greet.txt"
+// - "my-plugin.plg/Content/greet.txt"
+data, err := handle.ReadFile("/greet.txt")
+if err != nil {
+    // handle error
+}
+fmt.Printf("resource bytes: %d\n", len(data))
+```
+
