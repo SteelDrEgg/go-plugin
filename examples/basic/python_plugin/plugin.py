@@ -24,6 +24,30 @@ class GreeterServicer(greeter_pb2_grpc.GreeterServicer):
         return greeter_pb2.GreetReply(message=f"hello from python grpc plugin: {request.name}")
 
 
+class GreeterCallbackServicer(greeter_pb2_grpc.GreeterCallbackServicer):
+    def SayHello(self, request, context):
+        return greeter_pb2.GreetReply(message=f"hello from python grpc plugin: {request.name}")
+
+    def Chat(self, request_iterator, context):
+        yield greeter_pb2.ChatMessage(**{"from": "plugin", "text": "stream callback ready (python)"})
+        for msg in request_iterator:
+            yield greeter_pb2.ChatMessage(**{"from": "plugin", "text": f"echo: {msg.text}"})
+
+    def NotifyHost(self, request, context):
+        context.abort(grpc.StatusCode.UNIMPLEMENTED, "python plugin does not support broker callback")
+
+    def NotifyHostStd(self, request, context):
+        with grpc.insecure_channel(request.host_addr) as channel:
+            client = greeter_pb2_grpc.HostCallbackStub(channel)
+            reply = client.OnEvent(
+                greeter_pb2.CallbackEventRequest(
+                    text=f"callback from python plugin via standard grpc: {request.message}",
+                    token=request.token,
+                )
+            )
+        return greeter_pb2.NotifyHostStdReply(result=f"host callback ack: {reply.ack}")
+
+
 def validate_magic_cookie():
     actual = os.getenv(MAGIC_COOKIE_KEY)
     if actual == MAGIC_COOKIE_VALUE:
@@ -44,6 +68,7 @@ def serve():
 
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
     greeter_pb2_grpc.add_GreeterServicer_to_server(GreeterServicer(), server)
+    greeter_pb2_grpc.add_GreeterCallbackServicer_to_server(GreeterCallbackServicer(), server)
     health_pb2_grpc.add_HealthServicer_to_server(health, server)
 
     port = server.add_insecure_port("127.0.0.1:0")

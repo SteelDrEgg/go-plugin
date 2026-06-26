@@ -32,6 +32,14 @@ func extractPlugin(pluginFile, tempDir string) (tmpRoot string, info Info, plugi
 	if err != nil {
 		return "", Info{}, "", fmt.Errorf("create temp dir: %w", err)
 	}
+	if !filepath.IsAbs(tmpRoot) {
+		absRoot, err := filepath.Abs(tmpRoot)
+		if err != nil {
+			_ = removeDir(tmpRoot)
+			return "", Info{}, "", fmt.Errorf("resolve temp dir %q: %w", tmpRoot, err)
+		}
+		tmpRoot = absRoot
+	}
 
 	for _, zf := range zr.File {
 		if err := extractFile(tmpRoot, zf); err != nil {

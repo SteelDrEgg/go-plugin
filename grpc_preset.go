@@ -13,14 +13,18 @@ const defaultGRPCPresetPluginName = "default_grpc"
 
 type grpcPresetPlugin struct {
 	hcplugin.NetRPCUnsupportedPlugin
-	loader func(context.Context, *grpc.ClientConn) (any, error)
+	loader           func(context.Context, *grpc.ClientConn) (any, error)
+	loaderWithBroker func(context.Context, *GRPCBroker, *grpc.ClientConn) (any, error)
 }
 
 func (p *grpcPresetPlugin) GRPCServer(*hcplugin.GRPCBroker, *grpc.Server) error {
 	return fmt.Errorf("host only plugin")
 }
 
-func (p *grpcPresetPlugin) GRPCClient(ctx context.Context, _ *hcplugin.GRPCBroker, conn *grpc.ClientConn) (any, error) {
+func (p *grpcPresetPlugin) GRPCClient(ctx context.Context, broker *hcplugin.GRPCBroker, conn *grpc.ClientConn) (any, error) {
+	if p.loaderWithBroker != nil {
+		return p.loaderWithBroker(ctx, wrapGRPCBroker(broker), conn)
+	}
 	if p.loader == nil {
 		return conn, nil
 	}
@@ -30,7 +34,8 @@ func (p *grpcPresetPlugin) GRPCClient(ctx context.Context, _ *hcplugin.GRPCBroke
 func defaultGRPCPreset(cfg *GRPCConfig) map[string]hcplugin.Plugin {
 	return map[string]hcplugin.Plugin{
 		defaultGRPCPresetPluginName: &grpcPresetPlugin{
-			loader: cfg.Loader,
+			loader:           cfg.Loader,
+			loaderWithBroker: cfg.LoaderWithBroker,
 		},
 	}
 }

@@ -43,6 +43,9 @@ type GRPCConfig struct {
 	// Loader is used by the default gRPC preset.
 	// If nil, the preset returns *grpc.ClientConn as client.
 	Loader func(ctx context.Context, conn *grpc.ClientConn) (any, error)
+	// LoaderWithBroker is used by the default gRPC preset.
+	// If set, it takes precedence over Loader and receives GRPCBroker.
+	LoaderWithBroker func(ctx context.Context, broker *GRPCBroker, conn *grpc.ClientConn) (any, error)
 
 	ClientConfigOverride func(*ClientConfig)
 }

@@ -44,12 +44,16 @@ wasm:
 	mkdir -p dist
 	GOOS=wasip1 GOARCH=wasm go build -o ./dist/greeter.wasm -buildmode=c-shared ./wasm_plugin
 
+go-grpc:
+	mkdir -p dist
+	go build -o ./dist/greeter_go_grpc ./go_grpc_plugin
+
 package-python:
 	mkdir -p dist
 	rm -rf ./dist/python_pkg && mkdir -p ./dist/python_pkg/Content/proto
 	cp ./python_plugin/plugin.py ./dist/python_pkg/Content/plugin.py
 	cp ./python_plugin/proto/*.py ./dist/python_pkg/Content/proto/
-	printf 'Name: com.example/greeter-python\nVersion: 1.0.0\nType: grpc\nContractVersion: 1\nCommand: $(PYTHON_RUNTIME) $(abspath ./python_plugin/plugin.py)\nDisplayName: PythonGreeter\nCategory: basic-example\n' > ./dist/python_pkg/info.yaml
+	printf 'Name: com.example/greeter-python\nVersion: 1.0.0\nType: grpc\nContractVersion: 1\nCommand: $(PYTHON_RUNTIME) $$PLUGIN_ROOT/plugin.py\nDisplayName: PythonGreeter\nCategory: basic-example\n' > ./dist/python_pkg/info.yaml
 	cd ./dist/python_pkg && zip -qr ../greeter_python.plg .
 	rm -rf ./dist/python_pkg
 
@@ -62,7 +66,15 @@ package-wasm: wasm
 	cd ./dist/wasm_pkg && zip -qr ../greeter_wasm.plg .
 	rm -rf ./dist/wasm_pkg
 
-package: package-python package-wasm
+package-go-grpc: go-grpc
+	mkdir -p dist
+	rm -rf ./dist/go_grpc_pkg && mkdir -p ./dist/go_grpc_pkg/Content
+	cp ./dist/greeter_go_grpc ./dist/go_grpc_pkg/Content/greeter-go-grpc
+	printf 'Name: com.example/greeter-go-grpc\nVersion: 1.0.0\nType: grpc\nContractVersion: 1\nCommand: $$PLUGIN_ROOT/greeter-go-grpc\nDisplayName: GoGRPCGreeter\nCategory: basic-example\n' > ./dist/go_grpc_pkg/info.yaml
+	cd ./dist/go_grpc_pkg && zip -qr ../greeter_go_grpc.plg .
+	rm -rf ./dist/go_grpc_pkg
+
+package: package-go-grpc package-python package-wasm
 
 all: deps proto tidy package
 
@@ -70,7 +82,7 @@ run:
 	go run ./host
 
 clean:
-	rm -rf ./dist/greeter.wasm ./dist/greeter_python.plg ./dist/greeter_wasm.plg ./tmp/* ./api/wasm/*/*.pb.go ./api/grpc/*/*.pb.go ./python_plugin/proto/*pb2*.py
+	rm -rf ./dist/greeter.wasm ./dist/greeter_go_grpc ./dist/greeter_go_grpc.plg ./dist/greeter_python.plg ./dist/greeter_wasm.plg ./tmp/* ./api/wasm/*/*.pb.go ./api/grpc/*/*.pb.go ./python_plugin/proto/*pb2*.py
 
 purge: clean
 	rm -rf ./python_plugin/venv

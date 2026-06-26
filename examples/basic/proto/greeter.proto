@@ -28,13 +28,59 @@ message ReadFileReply {
   bytes data = 1;
 }
 
+message ChatMessage {
+  string from = 1;
+  string text = 2;
+}
+
+message NotifyHostRequest {
+  uint32 broker_id = 1;
+  string message = 2;
+}
+
+message NotifyHostReply {
+  string result = 1;
+}
+
+message NotifyHostStdRequest {
+  string host_addr = 1;
+  string token = 2;
+  string message = 3;
+}
+
+message NotifyHostStdReply {
+  string result = 1;
+}
+
+message CallbackEventRequest {
+  string text = 1;
+  string token = 2;
+}
+
+message CallbackEventReply {
+  string ack = 1;
+}
+
 // go:plugin type=plugin version=1
 service Greeter {
   rpc SayHello(GreetRequest) returns (GreetReply);
+}
+
+// grpc-only callback demo service (no wasm binding generation)
+service GreeterCallback {
+  rpc SayHello(GreetRequest) returns (GreetReply);
+  rpc Chat(stream ChatMessage) returns (stream ChatMessage);
+  rpc NotifyHost(NotifyHostRequest) returns (NotifyHostReply);
+  rpc NotifyHostStd(NotifyHostStdRequest) returns (NotifyHostStdReply);
 }
 
 // go:plugin type=host
 service HostFunctions {
   rpc Prefix(PrefixRequest) returns (PrefixReply);
   rpc ReadFile(ReadFileRequest) returns (ReadFileReply);
+}
+
+// host callback service for grpc broker reverse channel (golang only)
+service HostCallback {
+  rpc OnEvent(CallbackEventRequest) returns (CallbackEventReply);
 }
