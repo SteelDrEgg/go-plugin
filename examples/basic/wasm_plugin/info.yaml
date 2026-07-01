@@ -1,0 +1,7 @@
+Name: com.example/greeter-wasm
+Version: 1.0.0
+Type: wasm
+ContractVersion: 1
+Command: $PLUGIN_ROOT/greeter.wasm
+DisplayName: WasmGreeter
+Category: basic-example

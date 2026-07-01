@@ -7,6 +7,7 @@ This is an example shows how to use `SteelDrEgg/go-plugin`
 ```text
 basic
 ├── go_grpc_plugin
+│   ├── info.yaml
 │   └── main.go
 ├── host
 │   └── main.go
@@ -18,8 +19,11 @@ basic
 ├── proto
 │   └── greeter.proto
 ├── wasm_plugin
-│ └── main.go
+│   ├── greet.txt
+│   ├── info.yaml
+│   └── main.go
 ├── python_plugin
+│   ├── info.yaml
 │   ├── proto
 │   ├── plugin.py
 │   └── requirements.txt

@@ -53,7 +53,7 @@ package-python:
 	rm -rf ./dist/python_pkg && mkdir -p ./dist/python_pkg/Content/proto
 	cp ./python_plugin/plugin.py ./dist/python_pkg/Content/plugin.py
 	cp ./python_plugin/proto/*.py ./dist/python_pkg/Content/proto/
-	printf 'Name: com.example/greeter-python\nVersion: 1.0.0\nType: grpc\nContractVersion: 1\nCommand: $(PYTHON_RUNTIME) $$PLUGIN_ROOT/plugin.py\nDisplayName: PythonGreeter\nCategory: basic-example\n' > ./dist/python_pkg/info.yaml
+	sed 's|@PYTHON_RUNTIME@|$(PYTHON_RUNTIME)|g' ./python_plugin/info.yaml > ./dist/python_pkg/info.yaml
 	cd ./dist/python_pkg && zip -qr ../greeter_python.plg .
 	rm -rf ./dist/python_pkg
 
@@ -62,7 +62,7 @@ package-wasm: wasm
 	rm -rf ./dist/wasm_pkg && mkdir -p ./dist/wasm_pkg/Content
 	cp ./dist/greeter.wasm ./dist/wasm_pkg/Content/greeter.wasm
 	cp ./wasm_plugin/greet.txt ./dist/wasm_pkg/Content/greet.txt
-	printf 'Name: com.example/greeter-wasm\nVersion: 1.0.0\nType: wasm\nContractVersion: 1\nCommand: $$PLUGIN_ROOT/greeter.wasm\nDisplayName: WasmGreeter\nCategory: basic-example\n' > ./dist/wasm_pkg/info.yaml
+	cp ./wasm_plugin/info.yaml ./dist/wasm_pkg/info.yaml
 	cd ./dist/wasm_pkg && zip -qr ../greeter_wasm.plg .
 	rm -rf ./dist/wasm_pkg
 
@@ -70,7 +70,7 @@ package-go-grpc: go-grpc
 	mkdir -p dist
 	rm -rf ./dist/go_grpc_pkg && mkdir -p ./dist/go_grpc_pkg/Content
 	cp ./dist/greeter_go_grpc ./dist/go_grpc_pkg/Content/greeter-go-grpc
-	printf 'Name: com.example/greeter-go-grpc\nVersion: 1.0.0\nType: grpc\nContractVersion: 1\nCommand: $$PLUGIN_ROOT/greeter-go-grpc\nDisplayName: GoGRPCGreeter\nCategory: basic-example\n' > ./dist/go_grpc_pkg/info.yaml
+	cp ./go_grpc_plugin/info.yaml ./dist/go_grpc_pkg/info.yaml
 	cd ./dist/go_grpc_pkg && zip -qr ../greeter_go_grpc.plg .
 	rm -rf ./dist/go_grpc_pkg
 

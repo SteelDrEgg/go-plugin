@@ -1,0 +1,7 @@
+Name: com.example/greeter-go-grpc
+Version: 1.0.0
+Type: grpc
+ContractVersion: 1
+Command: $PLUGIN_ROOT/greeter-go-grpc
+DisplayName: GoGRPCGreeter
+Category: basic-example
