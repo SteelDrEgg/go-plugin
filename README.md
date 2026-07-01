@@ -33,6 +33,9 @@ Category: demo
 
 In the case of wasm, field `Command` will be the location of wasm file
 
+You can read an `info.yaml` file directly with `goplugin.ReadInfo`.
+Required fields are mapped onto `Info`; any other fields are stored in `Info.Metadata`.
+
 `plg` file will be extracted to a temporary location everytime before loading the plugin.
 
 `$PLUGIN_ROOT` will be the location of `Content`
@@ -139,4 +142,3 @@ if err != nil {
 }
 fmt.Printf("resource bytes: %d\n", len(data))
 ```
-

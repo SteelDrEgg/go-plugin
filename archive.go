@@ -7,8 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"gopkg.in/yaml.v3"
 )
 
 func extractPlugin(pluginFile, tempDir string) (tmpRoot string, info Info, pluginRoot string, err error) {
@@ -48,17 +46,8 @@ func extractPlugin(pluginFile, tempDir string) (tmpRoot string, info Info, plugi
 		}
 	}
 
-	infoBytes, err := os.ReadFile(filepath.Join(tmpRoot, "info.yaml"))
+	info, err = ReadInfo(filepath.Join(tmpRoot, "info.yaml"))
 	if err != nil {
-		_ = removeDir(tmpRoot)
-		return "", Info{}, "", fmt.Errorf("read info.yaml: %w", err)
-	}
-	if err := yaml.Unmarshal(infoBytes, &info); err != nil {
-		_ = removeDir(tmpRoot)
-		return "", Info{}, "", fmt.Errorf("parse info.yaml: %w", err)
-	}
-
-	if err := validateInfo(info); err != nil {
 		_ = removeDir(tmpRoot)
 		return "", Info{}, "", err
 	}
