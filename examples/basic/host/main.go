@@ -214,7 +214,8 @@ func callWasmPlugin(ctx context.Context, mgr *goplugin.Manager) error {
 	defer currentWasmHandle.Set(nil)
 
 	fmt.Println("===== Current Plugin:", handle.Info().Metadata["DisplayName"], "=====")
-
+	// IMPORTANT!
+	// THIS IS NOT TREAD SAFE, ADD A LOCK IN PRODUCTION!
 	client, ok := handle.Client().(wasmpb.Greeter)
 	if !ok {
 		return fmt.Errorf("unexpected wasm plugin client type %T", handle.Client())

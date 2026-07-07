@@ -120,6 +120,7 @@ defer mgr.Unload(handle)
 // pb.<PluginSDK> is a placeholder, definitions at .proto
 client, _ := handle.Client().(pb.<PluginSDK>)
 ```
+*WASM Client is not thread-safe, add a lock*
 
 Call plugin methods
 ```go
