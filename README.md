@@ -97,6 +97,8 @@ Prepare for configs. Here binds services defined in `proto`
 ```go
 goplugin.GRPCConfig{
     HandshakeConfig: handshake,
+    // Set true to prevent the plugin subprocess from inheriting the host environment.
+    SkipHostEnv: true,
     Loader: func(_ context.Context, c *grpc.ClientConn) (any, error) {
         return pb.NewPluginClient(c), nil
     },

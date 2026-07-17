@@ -34,6 +34,12 @@ type GRPCConfig struct {
 	HandshakeConfig HandshakeConfig
 
 	RunAsUser string
+	// SkipHostEnv prevents the plugin process from inheriting the host
+	// process environment. go-plugin still supplies the environment values
+	// required to establish its handshake.
+	//
+	// It defaults to false to preserve the existing behavior.
+	SkipHostEnv bool
 
 	AllowedProtocols []Protocol
 	Stderr           io.Writer

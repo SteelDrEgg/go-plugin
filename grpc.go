@@ -25,7 +25,7 @@ func (m *Manager) loadGRPC(_ context.Context, info Info, pluginRoot string) (bac
 	}
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Dir = pluginRoot
-	cmd.Env = append(os.Environ(), "PLUGIN_ROOT="+pluginRoot)
+	cmd.Env = []string{"PLUGIN_ROOT=" + pluginRoot}
 	if err := withRunAsUser(cmd, cfg.RunAsUser); err != nil {
 		return backendLoadResult{}, err
 	}
@@ -35,6 +35,7 @@ func (m *Manager) loadGRPC(_ context.Context, info Info, pluginRoot string) (bac
 		Plugins:          defaultGRPCPreset(cfg),
 		Cmd:              cmd,
 		AllowedProtocols: toHCProtocols(cfg.AllowedProtocols),
+		SkipHostEnv:      cfg.SkipHostEnv,
 		Stderr:           cfg.Stderr,
 		SyncStdout:       cfg.SyncStdout,
 		SyncStderr:       cfg.SyncStderr,
