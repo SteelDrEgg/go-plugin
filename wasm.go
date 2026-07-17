@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+
+	"github.com/tetratelabs/wazero"
+	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
 func (m *Manager) loadWASM(ctx context.Context, info Info, pluginRoot string) (backendLoadResult, error) {
@@ -20,7 +23,18 @@ func (m *Manager) loadWASM(ctx context.Context, info Info, pluginRoot string) (b
 		return backendLoadResult{}, err
 	}
 
-	client, cleanup, err := m.cfg.WASM.Loader(ctx, modulePath, info)
+	clientCfg := defaultWASMClientConfig()
+	if m.cfg.WASM.ClientConfigOverride != nil {
+		m.cfg.WASM.ClientConfigOverride(clientCfg)
+	}
+	if clientCfg.NewRuntime == nil {
+		return backendLoadResult{}, fmt.Errorf("wasm NewRuntime is required")
+	}
+	if clientCfg.ModuleConfig == nil {
+		return backendLoadResult{}, fmt.Errorf("wasm ModuleConfig is required")
+	}
+
+	client, cleanup, err := m.cfg.WASM.Loader(ctx, modulePath, info, clientCfg)
 	if err != nil {
 		return backendLoadResult{}, err
 	}
@@ -28,6 +42,20 @@ func (m *Manager) loadWASM(ctx context.Context, info Info, pluginRoot string) (b
 		client:  client,
 		cleanup: cleanup,
 	}, nil
+}
+
+func defaultWASMClientConfig() *WASMClientConfig {
+	return &WASMClientConfig{
+		NewRuntime: func(ctx context.Context) (wazero.Runtime, error) {
+			r := wazero.NewRuntime(ctx)
+			if _, err := wasi_snapshot_preview1.Instantiate(ctx, r); err != nil {
+				_ = r.Close(ctx)
+				return nil, err
+			}
+			return r, nil
+		},
+		ModuleConfig: wazero.NewModuleConfig().WithStartFunctions("_initialize"),
+	}
 }
 
 func resolveWASMModulePath(pluginRoot, command string) (string, error) {

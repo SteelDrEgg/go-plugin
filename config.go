@@ -6,6 +6,7 @@ import (
 	"os/exec"
 
 	hcplugin "github.com/hashicorp/go-plugin"
+	"github.com/tetratelabs/wazero"
 	"google.golang.org/grpc"
 )
 
@@ -57,13 +58,27 @@ type GRPCConfig struct {
 }
 
 type WASMConfig struct {
-	// Loader receives resolved module path from info.Command and returns:
+	// Loader receives the resolved module path, plugin metadata, and the
+	// WASM client configuration after ClientConfigOverride has been applied.
+	// It returns:
 	// 1) plugin client instance used by caller
 	// 2) cleanup function invoked on Unload
-	Loader func(ctx context.Context, modulePath string, info Info) (client any, cleanup func(context.Context) error, err error)
+	Loader func(ctx context.Context, modulePath string, info Info, clientConfig *WASMClientConfig) (client any, cleanup func(context.Context) error, err error)
 
-	// Reserved for future parity with design doc.
-	RuntimeConfigOverride any
+	// ClientConfigOverride customizes the wazero runtime and module settings
+	// before Loader creates a contract-specific WASM client.
+	ClientConfigOverride func(*WASMClientConfig)
+}
+
+// WASMClientConfig contains wazero settings shared with a WASM Loader.
+// A fresh runtime must be created for each loaded plugin.
+type WASMClientConfig struct {
+	// NewRuntime creates a new wazero runtime for one plugin instance.
+	// It must install any required host modules, such as WASI.
+	NewRuntime func(context.Context) (wazero.Runtime, error)
+
+	// ModuleConfig configures the WebAssembly module instance.
+	ModuleConfig wazero.ModuleConfig
 }
 
 type Info struct {

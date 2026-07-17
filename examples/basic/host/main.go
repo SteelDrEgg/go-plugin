@@ -229,8 +229,12 @@ func callWasmPlugin(ctx context.Context, mgr *goplugin.Manager) error {
 	return nil
 }
 
-func loadWasmGreeter(ctx context.Context, modulePath string, _ goplugin.Info) (any, func(context.Context) error, error) {
-	loader, err := wasmpb.NewGreeterPlugin(ctx)
+func loadWasmGreeter(ctx context.Context, modulePath string, _ goplugin.Info, runtimeCfg *goplugin.WASMClientConfig) (any, func(context.Context) error, error) {
+	loader, err := wasmpb.NewGreeterPlugin(
+		ctx,
+		wasmpb.WazeroRuntime(runtimeCfg.NewRuntime),
+		wasmpb.WazeroModuleConfig(runtimeCfg.ModuleConfig),
+	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("new wasm loader: %w", err)
 	}
