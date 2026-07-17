@@ -48,6 +48,12 @@ func main() {
 			},
 		},
 		WASM: &goplugin.WASMConfig{
+			ClientConfigOverride: func(cfg *goplugin.WASMClientConfig) {
+				// If don't explicitly specify, wasm could not access real clock
+				cfg.ModuleConfig = cfg.ModuleConfig.
+					WithSysWalltime().
+					WithSysNanotime()
+			},
 			Loader: loadWasmGreeter,
 		},
 	})
