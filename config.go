@@ -11,6 +11,8 @@ import (
 )
 
 type Config struct {
+	// TempDir is the parent directory for extracted or copied plugins.
+	// If empty, the system temporary directory is used.
 	TempDir string
 
 	GRPC *GRPCConfig

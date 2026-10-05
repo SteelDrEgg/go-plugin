@@ -36,7 +36,8 @@ In the case of wasm, field `Command` will be the location of wasm file
 You can read an `info.yaml` file directly with `goplugin.ReadInfo`.
 Required fields are mapped onto `Info`; any other fields are stored in `Info.Metadata`.
 
-`plg` file will be extracted to a temporary location everytime before loading the plugin.
+`plg` files are extracted to a temporary location before loading. Unpacked plugin
+directories can also be loaded directly or copied to a temporary location first.
 
 `$PLUGIN_ROOT` will be the location of `Content`
 
@@ -108,6 +109,7 @@ goplugin.GRPCConfig{
 Load the config
 ```go
 mgr, err := goplugin.NewManager(goplugin.Config{
+    // Optional: empty uses the system temporary directory.
     TempDir: "/tmp",
     GRPC: GRPCConfig,
     WASM: nil,
@@ -122,6 +124,25 @@ defer mgr.Unload(handle)
 // pb.<PluginSDK> is a placeholder, definitions at .proto
 client, _ := handle.Client().(pb.<PluginSDK>)
 ```
+
+To load an unpacked directory, keep the same `info.yaml` and `Content/` layout:
+
+```go
+// Use the original directory. Unload never removes the source directory.
+handle, err := mgr.LoadDir("./my-plugin", false)
+
+// Or copy the directory to a private temporary directory before loading.
+handle, err = mgr.LoadDir("./my-plugin", true)
+```
+
+The copy preserves file permissions, including executable bits. Copying supports
+regular files and directories; symbolic links and special files are rejected.
+`$PLUGIN_ROOT` and `handle.RootPath()` refer to the loaded `Content/` directory.
+Copied resources are independent of later source changes; loading in place uses
+the original resources. Always call `mgr.Unload(handle)` or `handle.Close(ctx)`
+after a successful load. Temporary copies are removed on load failure or after
+successful plugin cleanup during unload.
+
 *WASM Client is not thread-safe, add a lock*
 
 Call plugin methods

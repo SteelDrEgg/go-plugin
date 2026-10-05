@@ -36,7 +36,7 @@ func (h *Handle) PluginPath() string {
 	return h.plugin
 }
 
-// RootPath returns the extracted plugin Content directory path.
+// RootPath returns the absolute path to the loaded plugin's Content directory.
 func (h *Handle) RootPath() string {
 	return h.root
 }

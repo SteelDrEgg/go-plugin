@@ -14,9 +14,6 @@ type Manager struct {
 
 func NewManager(cfg Config) (*Manager, error) {
 	cfg.defaults()
-	if cfg.TempDir == "" {
-		return nil, fmt.Errorf("TempDir is required")
-	}
 	if cfg.GRPC == nil && cfg.WASM == nil {
 		return nil, fmt.Errorf("at least one backend config is required")
 	}
@@ -32,6 +29,25 @@ func (m *Manager) Load(path string) (*Handle, error) {
 		return nil, err
 	}
 
+	return m.loadPrepared(info, path, pluginRoot, tmpRoot)
+}
+
+// LoadDir loads a directory containing info.yaml and Content.
+// If copyToTemp is true, it copies the directory to a private temporary directory
+// that is removed on failure or unload. Otherwise the source directory is used
+// directly and is never removed by the manager.
+func (m *Manager) LoadDir(dir string, copyToTemp bool) (*Handle, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	tmpRoot, info, pluginRoot, err := preparePluginDir(dir, m.cfg.TempDir, copyToTemp)
+	if err != nil {
+		return nil, err
+	}
+	return m.loadPrepared(info, dir, pluginRoot, tmpRoot)
+}
+
+func (m *Manager) loadPrepared(info Info, source, pluginRoot, tmpRoot string) (*Handle, error) {
 	loadRes, err := m.loadByType(context.Background(), info, pluginRoot)
 	if err != nil {
 		_ = removeDir(tmpRoot)
@@ -41,7 +57,7 @@ func (m *Manager) Load(path string) (*Handle, error) {
 	h := &Handle{
 		client:   loadRes.client,
 		info:     info,
-		plugin:   path,
+		plugin:   source,
 		root:     pluginRoot,
 		tmpRoot:  tmpRoot,
 		cleanup:  loadRes.cleanup,
