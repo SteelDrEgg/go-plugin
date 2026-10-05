@@ -7,12 +7,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	hclog "github.com/hashicorp/go-hclog"
 	hcplugin "github.com/hashicorp/go-plugin"
 )
 
-func (m *Manager) loadGRPC(_ context.Context, info Info, pluginRoot string) (backendLoadResult, error) {
+func (m *Manager) loadGRPC(ctx context.Context, info Info, pluginRoot string) (backendLoadResult, error) {
 	if m.cfg.GRPC == nil {
 		return backendLoadResult{}, fmt.Errorf("grpc backend config is not set")
 	}
@@ -23,7 +24,17 @@ func (m *Manager) loadGRPC(_ context.Context, info Info, pluginRoot string) (bac
 	if err != nil {
 		return backendLoadResult{}, err
 	}
-	cmd := exec.Command(args[0], args[1:]...)
+	// The process outlives the startup context after a successful load.
+	processCtx, cancelProcess := context.WithCancel(context.Background())
+	stopCancellation := context.AfterFunc(ctx, cancelProcess)
+	defer stopCancellation()
+	owned := false
+	defer func() {
+		if !owned {
+			cancelProcess()
+		}
+	}()
+	cmd := exec.CommandContext(processCtx, args[0], args[1:]...)
 	cmd.Dir = pluginRoot
 	cmd.Env = []string{"PLUGIN_ROOT=" + pluginRoot}
 	if err := withRunAsUser(cmd, cfg.RunAsUser); err != nil {
@@ -32,7 +43,7 @@ func (m *Manager) loadGRPC(_ context.Context, info Info, pluginRoot string) (bac
 
 	clientCfg := &hcplugin.ClientConfig{
 		HandshakeConfig:  toHCHandshake(cfg.HandshakeConfig),
-		Plugins:          defaultGRPCPreset(cfg),
+		Plugins:          defaultGRPCPreset(ctx, cfg),
 		Cmd:              cmd,
 		AllowedProtocols: toHCProtocols(cfg.AllowedProtocols),
 		SkipHostEnv:      cfg.SkipHostEnv,
@@ -53,23 +64,51 @@ func (m *Manager) loadGRPC(_ context.Context, info Info, pluginRoot string) (bac
 	}
 
 	pluginClient := hcplugin.NewClient(clientCfg)
+	cleanup := grpcCleanup(pluginClient, cancelProcess)
+	owned = true
 	grpcClient, err := pluginClient.Client()
 	if err != nil {
-		pluginClient.Kill()
-		return backendLoadResult{}, fmt.Errorf("connect plugin %q: %w", filepath.Base(commandLine), err)
+		cancelProcess()
+		return backendLoadResult{cleanup: cleanup}, fmt.Errorf("connect plugin %q: %w", filepath.Base(commandLine), err)
 	}
 
 	raw, err := grpcClient.Dispense(dispenseName)
 	if err != nil {
-		pluginClient.Kill()
-		return backendLoadResult{}, fmt.Errorf("dispense %q: %w", dispenseName, err)
+		cancelProcess()
+		return backendLoadResult{cleanup: cleanup}, fmt.Errorf("dispense %q: %w", dispenseName, err)
 	}
 
 	return backendLoadResult{
-		client: raw,
-		cleanup: func(context.Context) error {
-			pluginClient.Kill()
-			return nil
-		},
+		client:  raw,
+		cleanup: cleanup,
 	}, nil
+}
+
+// Hashicorp's Kill blocks and has no context parameter. Run it once so a
+// timed-out close can be retried by waiting for the same cleanup operation.
+func grpcCleanup(client *hcplugin.Client, cancelProcess context.CancelFunc) func(context.Context) error {
+	var once sync.Once
+	done := make(chan struct{})
+	return func(ctx context.Context) error {
+		once.Do(func() {
+			go func() {
+				defer close(done)
+				defer cancelProcess()
+				client.Kill()
+			}()
+		})
+		select {
+		case <-done:
+			return nil
+		default:
+		}
+		select {
+		case <-done:
+			return nil
+		case <-ctx.Done():
+			// Force the owned subprocess to exit if graceful shutdown stalls.
+			cancelProcess()
+			return ctx.Err()
+		}
+	}
 }

@@ -2,14 +2,12 @@ package goplugin
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"sync"
 )
 
 type Manager struct {
 	cfg Config
-
-	mu sync.Mutex
 }
 
 func NewManager(cfg Config) (*Manager, error) {
@@ -21,15 +19,21 @@ func NewManager(cfg Config) (*Manager, error) {
 }
 
 func (m *Manager) Load(path string) (*Handle, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	return m.LoadContext(context.Background(), path)
+}
 
-	tmpRoot, info, pluginRoot, err := extractPlugin(path, m.cfg.TempDir)
+// LoadContext loads a package using ctx for preparation and backend startup.
+// Cancellation after a successful load does not close the plugin.
+func (m *Manager) LoadContext(ctx context.Context, path string) (*Handle, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	tmpRoot, info, pluginRoot, err := extractPlugin(ctx, path, m.cfg.TempDir)
 	if err != nil {
 		return nil, err
 	}
 
-	return m.loadPrepared(info, path, pluginRoot, tmpRoot)
+	return m.loadPrepared(ctx, info, path, pluginRoot, tmpRoot)
 }
 
 // LoadDir loads a directory containing info.yaml and Content.
@@ -37,21 +41,29 @@ func (m *Manager) Load(path string) (*Handle, error) {
 // that is removed on failure or unload. Otherwise the source directory is used
 // directly and is never removed by the manager.
 func (m *Manager) LoadDir(dir string, copyToTemp bool) (*Handle, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	return m.LoadDirContext(context.Background(), dir, copyToTemp)
+}
 
-	tmpRoot, info, pluginRoot, err := preparePluginDir(dir, m.cfg.TempDir, copyToTemp)
+// LoadDirContext is LoadDir with cancellation during preparation and startup.
+func (m *Manager) LoadDirContext(ctx context.Context, dir string, copyToTemp bool) (*Handle, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	tmpRoot, info, pluginRoot, err := preparePluginDir(ctx, dir, m.cfg.TempDir, copyToTemp)
 	if err != nil {
 		return nil, err
 	}
-	return m.loadPrepared(info, dir, pluginRoot, tmpRoot)
+	return m.loadPrepared(ctx, info, dir, pluginRoot, tmpRoot)
 }
 
-func (m *Manager) loadPrepared(info Info, source, pluginRoot, tmpRoot string) (*Handle, error) {
-	loadRes, err := m.loadByType(context.Background(), info, pluginRoot)
-	if err != nil {
-		_ = removeDir(tmpRoot)
-		return nil, err
+func (m *Manager) loadPrepared(ctx context.Context, info Info, source, pluginRoot, tmpRoot string) (*Handle, error) {
+	var loadRes backendLoadResult
+	err := ctx.Err()
+	if err == nil {
+		loadRes, err = m.loadByType(ctx, info, pluginRoot)
+	}
+	if ctxErr := ctx.Err(); ctxErr != nil && !errors.Is(err, ctxErr) {
+		err = errors.Join(err, ctxErr)
 	}
 
 	h := &Handle{
@@ -63,14 +75,32 @@ func (m *Manager) loadPrepared(info Info, source, pluginRoot, tmpRoot string) (*
 		cleanup:  loadRes.cleanup,
 		unloader: removeDir,
 	}
+	if err != nil {
+		// Rollback must still run when the startup context has been cancelled.
+		if closeErr := h.Close(context.WithoutCancel(ctx)); closeErr != nil {
+			if tmpRoot != "" {
+				closeErr = fmt.Errorf("rollback plugin (temporary directory %q retained): %w", tmpRoot, closeErr)
+			} else {
+				closeErr = fmt.Errorf("rollback plugin %q: %w", source, closeErr)
+			}
+			return nil, errors.Join(err, closeErr)
+		}
+		return nil, err
+	}
 	return h, nil
 }
 
 func (m *Manager) Unload(h *Handle) error {
+	return m.UnloadContext(context.Background(), h)
+}
+
+// UnloadContext closes one handle. The application owns loaded handles and must
+// stop using each plugin before unloading it.
+func (m *Manager) UnloadContext(ctx context.Context, h *Handle) error {
 	if h == nil {
 		return nil
 	}
-	return h.Close(context.Background())
+	return h.Close(ctx)
 }
 
 func (m *Manager) loadByType(ctx context.Context, info Info, pluginRoot string) (backendLoadResult, error) {

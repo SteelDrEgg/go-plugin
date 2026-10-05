@@ -12,6 +12,7 @@ import (
 	grpcpb "example.com/my-go-plugin-example/api/grpc/proto"
 
 	goplugin "github.com/SteelDrEgg/go-plugin"
+	"github.com/tetratelabs/wazero"
 	"google.golang.org/grpc"
 )
 
@@ -236,21 +237,33 @@ func callWasmPlugin(ctx context.Context, mgr *goplugin.Manager) error {
 }
 
 func loadWasmGreeter(ctx context.Context, modulePath string, _ goplugin.Info, runtimeCfg *goplugin.WASMClientConfig) (any, func(context.Context) error, error) {
+	// Retain the runtime even if generated client initialization fails.
+	var runtime wazero.Runtime
+	cleanup := func(ctx context.Context) error {
+		if runtime != nil {
+			return runtime.Close(ctx)
+		}
+		return nil
+	}
 	loader, err := wasmpb.NewGreeterPlugin(
 		ctx,
-		wasmpb.WazeroRuntime(runtimeCfg.NewRuntime),
+		wasmpb.WazeroRuntime(func(ctx context.Context) (wazero.Runtime, error) {
+			var err error
+			runtime, err = runtimeCfg.NewRuntime(ctx)
+			return runtime, err
+		}),
 		wasmpb.WazeroModuleConfig(runtimeCfg.ModuleConfig),
 	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("new wasm loader: %w", err)
+		return nil, cleanup, fmt.Errorf("new wasm loader: %w", err)
 	}
 
 	client, err := loader.Load(ctx, modulePath, hostFunctions{})
 	if err != nil {
-		return nil, nil, fmt.Errorf("load wasm binary: %w", err)
+		return nil, cleanup, fmt.Errorf("load wasm binary: %w", err)
 	}
 
-	return client, func(ctx context.Context) error { return client.Close(ctx) }, nil
+	return client, cleanup, nil
 }
 
 type hostFunctions struct{}

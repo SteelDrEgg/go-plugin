@@ -19,9 +19,11 @@ type Handle struct {
 	tmpRoot string
 	cleanup func(context.Context) error
 
-	unloader func(string) error
-	once     sync.Once
-	closeErr error
+	unloader    func(string) error
+	closeOnce   sync.Once
+	closeGate   chan struct{}
+	cleanupDone bool
+	closed      bool
 }
 
 func (h *Handle) Client() any {
@@ -106,17 +108,47 @@ func (h *Handle) ReadFile(resource string) ([]byte, error) {
 	return b, nil
 }
 
+// Close releases the backend before removing private temporary resources.
+// Failed steps can be retried with a new context; successful steps are not repeated.
+// Concurrent Close calls are serialized and can cancel while waiting.
+// The caller must stop plugin calls and resource reads before closing the handle.
 func (h *Handle) Close(ctx context.Context) error {
-	h.once.Do(func() {
+	h.closeOnce.Do(func() {
+		h.closeGate = make(chan struct{}, 1)
+		h.closeGate <- struct{}{}
+	})
+	select {
+	case <-h.closeGate:
+	default:
+		select {
+		case <-h.closeGate:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	defer func() { h.closeGate <- struct{}{} }()
+	if h.closed {
+		return nil
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if !h.cleanupDone {
 		if h.cleanup != nil {
 			if err := h.cleanup(ctx); err != nil {
-				h.closeErr = err
-				return
+				return fmt.Errorf("close plugin backend: %w", err)
 			}
 		}
-		if h.unloader != nil {
-			h.closeErr = h.unloader(h.tmpRoot)
+		h.cleanupDone = true
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if h.unloader != nil {
+		if err := h.unloader(h.tmpRoot); err != nil {
+			return fmt.Errorf("remove plugin temporary directory %q: %w", h.tmpRoot, err)
 		}
-	})
-	return h.closeErr
+	}
+	h.closed = true
+	return nil
 }

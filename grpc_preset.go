@@ -15,6 +15,7 @@ type grpcPresetPlugin struct {
 	hcplugin.NetRPCUnsupportedPlugin
 	loader           func(context.Context, *grpc.ClientConn) (any, error)
 	loaderWithBroker func(context.Context, *GRPCBroker, *grpc.ClientConn) (any, error)
+	loadCtx          context.Context
 }
 
 func (p *grpcPresetPlugin) GRPCServer(*hcplugin.GRPCBroker, *grpc.Server) error {
@@ -22,20 +23,33 @@ func (p *grpcPresetPlugin) GRPCServer(*hcplugin.GRPCBroker, *grpc.Server) error 
 }
 
 func (p *grpcPresetPlugin) GRPCClient(ctx context.Context, broker *hcplugin.GRPCBroker, conn *grpc.ClientConn) (any, error) {
+	// The loader's startup context carries caller values and deadlines, and
+	// also stops if the backend exits. It must not be retained after startup.
+	loaderCtx, cancel := context.WithCancel(p.loadCtx)
+	defer cancel()
+	stopLifetime := context.AfterFunc(ctx, cancel)
+	defer stopLifetime()
+	if err := p.loadCtx.Err(); err != nil {
+		return nil, err
+	}
+	var client any
+	var err error
 	if p.loaderWithBroker != nil {
-		return p.loaderWithBroker(ctx, wrapGRPCBroker(broker), conn)
+		client, err = p.loaderWithBroker(loaderCtx, wrapGRPCBroker(broker), conn)
+	} else if p.loader != nil {
+		client, err = p.loader(loaderCtx, conn)
+	} else {
+		client = conn
 	}
-	if p.loader == nil {
-		return conn, nil
-	}
-	return p.loader(ctx, conn)
+	return client, err
 }
 
-func defaultGRPCPreset(cfg *GRPCConfig) map[string]hcplugin.Plugin {
+func defaultGRPCPreset(ctx context.Context, cfg *GRPCConfig) map[string]hcplugin.Plugin {
 	return map[string]hcplugin.Plugin{
 		defaultGRPCPresetPluginName: &grpcPresetPlugin{
 			loader:           cfg.Loader,
 			loaderWithBroker: cfg.LoaderWithBroker,
+			loadCtx:          ctx,
 		},
 	}
 }

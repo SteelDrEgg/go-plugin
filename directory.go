@@ -1,6 +1,7 @@
 package goplugin
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"io/fs"
@@ -8,7 +9,7 @@ import (
 	"path/filepath"
 )
 
-func preparePluginDir(dir, tempDir string, copyToTemp bool) (tmpRoot string, info Info, pluginRoot string, err error) {
+func preparePluginDir(ctx context.Context, dir, tempDir string, copyToTemp bool) (tmpRoot string, info Info, pluginRoot string, err error) {
 	source, err := filepath.Abs(dir)
 	if err != nil {
 		return "", Info{}, "", fmt.Errorf("resolve plugin directory: %w", err)
@@ -26,6 +27,9 @@ func preparePluginDir(dir, tempDir string, copyToTemp bool) (tmpRoot string, inf
 		// WalkDir does not follow symlinks; only ordinary files and directories
 		// are supported for copying.
 		if err := filepath.WalkDir(source, func(path string, entry fs.DirEntry, walkErr error) error {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			if walkErr != nil {
 				return walkErr
 			}
@@ -42,7 +46,7 @@ func preparePluginDir(dir, tempDir string, copyToTemp bool) (tmpRoot string, inf
 		}
 		defer func() {
 			if err != nil {
-				_ = removeDir(tmpRoot)
+				err = rollbackTempDir(tmpRoot, err)
 			}
 		}()
 		root, err = filepath.Abs(tmpRoot)
@@ -59,7 +63,7 @@ func preparePluginDir(dir, tempDir string, copyToTemp bool) (tmpRoot string, inf
 		if resolveErr != nil {
 			return tmpRoot, Info{}, "", resolveErr
 		}
-		err = copyPluginDir(realSource, realRoot)
+		err = copyPluginDir(ctx, realSource, realRoot)
 		if err != nil {
 			return tmpRoot, Info{}, "", err
 		}
@@ -79,8 +83,11 @@ func preparePluginDir(dir, tempDir string, copyToTemp bool) (tmpRoot string, inf
 	return tmpRoot, info, pluginRoot, nil
 }
 
-func copyPluginDir(source, destination string) error {
+func copyPluginDir(ctx context.Context, source, destination string) error {
 	return filepath.WalkDir(source, func(path string, entry fs.DirEntry, err error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err != nil {
 			return err
 		}
@@ -98,11 +105,11 @@ func copyPluginDir(source, destination string) error {
 		if entry.IsDir() {
 			return os.MkdirAll(target, 0o755)
 		}
-		return copyPluginFile(path, target)
+		return copyPluginFile(ctx, path, target)
 	})
 }
 
-func copyPluginFile(source, target string) error {
+func copyPluginFile(ctx context.Context, source, target string) error {
 	src, err := os.Open(source)
 	if err != nil {
 		return fmt.Errorf("open plugin file: %w", err)
@@ -119,7 +126,7 @@ func copyPluginFile(source, target string) error {
 	if err != nil {
 		return fmt.Errorf("create copied plugin file: %w", err)
 	}
-	_, copyErr := io.Copy(dst, src)
+	_, copyErr := io.Copy(dst, contextReader{ctx: ctx, r: src})
 	// Apply permissions explicitly so the umask does not strip executable bits.
 	if copyErr == nil {
 		copyErr = dst.Chmod(st.Mode().Perm())

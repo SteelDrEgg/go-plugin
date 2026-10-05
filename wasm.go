@@ -35,13 +35,10 @@ func (m *Manager) loadWASM(ctx context.Context, info Info, pluginRoot string) (b
 	}
 
 	client, cleanup, err := m.cfg.WASM.Loader(ctx, modulePath, info, clientCfg)
-	if err != nil {
-		return backendLoadResult{}, err
-	}
 	return backendLoadResult{
 		client:  client,
 		cleanup: cleanup,
-	}, nil
+	}, err
 }
 
 func defaultWASMClientConfig() *WASMClientConfig {

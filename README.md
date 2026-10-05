@@ -141,7 +141,56 @@ regular files and directories; symbolic links and special files are rejected.
 Copied resources are independent of later source changes; loading in place uses
 the original resources. Always call `mgr.Unload(handle)` or `handle.Close(ctx)`
 after a successful load. Temporary copies are removed on load failure or after
-successful plugin cleanup during unload.
+successful plugin cleanup during unload. If backend cleanup fails during load
+rollback, the temporary directory is retained and its path is included in the
+returned error. Cleanup errors are reported alongside the original load error.
+
+### Lifecycle and cancellation
+
+The application owns each returned `Handle` and decides when to unload it. Before
+closing a handle, stop new plugin calls and resource reads, and wait for existing
+operations to finish. `Client()` does not track calls or prevent use after close.
+
+`LoadContext(ctx, path)`, `LoadDirContext(ctx, dir, copyToTemp)`, and
+`UnloadContext(ctx, handle)` accept cancellation and deadlines. Existing `Load`,
+`LoadDir`, and `Unload` use a background context. A startup context controls file
+preparation and backend initialization; cancelling it after a successful load does
+not close the plugin. Cancellation during file preparation is checked between
+entries and reads; an already-blocked filesystem operation cannot be interrupted.
+
+```go
+loadCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+handle, err := mgr.LoadContext(loadCtx, "my-plugin.plg")
+cancel()
+if err != nil {
+    return err
+}
+// Use the plugin, then stop and drain all calls before closing it.
+closeCtx, closeCancel := context.WithTimeout(context.Background(), 5*time.Second)
+defer closeCancel()
+if err := mgr.UnloadContext(closeCtx, handle); err != nil {
+    // Keep the handle and retry Close with a fresh context.
+    return err
+}
+```
+
+Closing is serialized per handle. A failed close can be retried, and completed
+steps are not repeated: backend cleanup succeeds before temporary files are
+removed. A gRPC close deadline forces the default subprocess to exit while backend
+cleanup finishes in the background; retry close to await completion and remove the
+temporary directory. Once close succeeds, subsequent close calls return nil.
+
+Loaders must honor the startup context and use separate contexts for later plugin
+calls. A WASM Loader that allocates resources before returning an error must either
+release them itself or return a cleanup function with the error. The manager runs
+that function during rollback, using a context without startup cancellation, and
+reports any cleanup error. Rollback can extend beyond the startup deadline.
+Cleanup callbacks must honor their context and tolerate retries after failure.
+
+Loads can run concurrently. Configuration must remain unchanged after manager
+creation, and Loader and configuration override callbacks must support concurrent
+invocation. gRPC overrides replacing the command, runner, or plugin presets must
+provide equivalent startup cancellation and shutdown behavior themselves.
 
 *WASM Client is not thread-safe, add a lock*
 

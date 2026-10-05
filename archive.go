@@ -2,6 +2,7 @@ package goplugin
 
 import (
 	"archive/zip"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -9,7 +10,7 @@ import (
 	"strings"
 )
 
-func extractPlugin(pluginFile, tempDir string) (tmpRoot string, info Info, pluginRoot string, err error) {
+func extractPlugin(ctx context.Context, pluginFile, tempDir string) (tmpRoot string, info Info, pluginRoot string, err error) {
 	f, err := os.Open(pluginFile)
 	if err != nil {
 		return "", Info{}, "", fmt.Errorf("open plugin package: %w", err)
@@ -30,38 +31,43 @@ func extractPlugin(pluginFile, tempDir string) (tmpRoot string, info Info, plugi
 	if err != nil {
 		return "", Info{}, "", fmt.Errorf("create temp dir: %w", err)
 	}
+	cleanupRoot := tmpRoot
+	defer func() {
+		if err != nil {
+			err = rollbackTempDir(cleanupRoot, err)
+		}
+	}()
 	if !filepath.IsAbs(tmpRoot) {
 		absRoot, err := filepath.Abs(tmpRoot)
 		if err != nil {
-			_ = removeDir(tmpRoot)
 			return "", Info{}, "", fmt.Errorf("resolve temp dir %q: %w", tmpRoot, err)
 		}
 		tmpRoot = absRoot
 	}
 
 	for _, zf := range zr.File {
-		if err := extractFile(tmpRoot, zf); err != nil {
-			_ = removeDir(tmpRoot)
+		if err := extractFile(ctx, tmpRoot, zf); err != nil {
 			return "", Info{}, "", err
 		}
 	}
 
 	info, err = ReadInfo(filepath.Join(tmpRoot, "info.yaml"))
 	if err != nil {
-		_ = removeDir(tmpRoot)
 		return "", Info{}, "", err
 	}
 
 	pluginRoot = filepath.Join(tmpRoot, "Content")
 	if _, err := os.Stat(pluginRoot); err != nil {
-		_ = removeDir(tmpRoot)
 		return "", Info{}, "", fmt.Errorf("plugin content dir missing: %w", err)
 	}
 
 	return tmpRoot, info, pluginRoot, nil
 }
 
-func extractFile(root string, zf *zip.File) error {
+func extractFile(ctx context.Context, root string, zf *zip.File) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	cleanName := filepath.Clean(zf.Name)
 	if strings.Contains(cleanName, ".."+string(filepath.Separator)) {
 		return fmt.Errorf("invalid zip entry path %q", zf.Name)
@@ -89,13 +95,12 @@ func extractFile(root string, zf *zip.File) error {
 	if err != nil {
 		return fmt.Errorf("create extracted file %q: %w", target, err)
 	}
-	defer dst.Close()
-
-	if _, err := io.Copy(dst, src); err != nil {
-		return fmt.Errorf("extract %q: %w", zf.Name, err)
+	_, copyErr := io.Copy(dst, contextReader{ctx: ctx, r: src})
+	closeErr := dst.Close()
+	if copyErr != nil {
+		return fmt.Errorf("extract %q: %w", zf.Name, copyErr)
 	}
-
-	return nil
+	return closeErr
 }
 
 func validateInfo(info Info) error {

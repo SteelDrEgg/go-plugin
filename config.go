@@ -10,6 +10,8 @@ import (
 	"google.golang.org/grpc"
 )
 
+// Configuration and callbacks must not be mutated after NewManager.
+// Concurrent loads may invoke callbacks concurrently.
 type Config struct {
 	// TempDir is the parent directory for extracted or copied plugins.
 	// If empty, the system temporary directory is used.
@@ -49,13 +51,16 @@ type GRPCConfig struct {
 	SyncStdout       io.Writer
 	SyncStderr       io.Writer
 
-	// Loader is used by the default gRPC preset.
+	// Loader is used by the default gRPC preset and must respect ctx during startup.
 	// If nil, the preset returns *grpc.ClientConn as client.
 	Loader func(ctx context.Context, conn *grpc.ClientConn) (any, error)
 	// LoaderWithBroker is used by the default gRPC preset.
 	// If set, it takes precedence over Loader and receives GRPCBroker.
 	LoaderWithBroker func(ctx context.Context, broker *GRPCBroker, conn *grpc.ClientConn) (any, error)
 
+	// Overrides that replace Cmd, RunnerFunc, or Plugins must implement their own
+	// startup cancellation. The default subprocess can be force-killed when a
+	// close context expires; custom runners must provide equivalent behavior.
 	ClientConfigOverride func(*ClientConfig)
 }
 
@@ -65,6 +70,11 @@ type WASMConfig struct {
 	// It returns:
 	// 1) plugin client instance used by caller
 	// 2) cleanup function invoked on Unload
+	//
+	// Loader must respect ctx during startup. If it allocates resources before
+	// returning an error, it must either release them itself or return cleanup.
+	// Returned cleanup is also called on load failure with an uncancelled context.
+	// Cleanup must tolerate retries after errors and honor its context.
 	Loader func(ctx context.Context, modulePath string, info Info, clientConfig *WASMClientConfig) (client any, cleanup func(context.Context) error, err error)
 
 	// ClientConfigOverride customizes the wazero runtime and module settings
