@@ -215,3 +215,18 @@ if err != nil {
 }
 fmt.Printf("resource bytes: %d\n", len(data))
 ```
+
+## Backend exit notifications
+
+`Handle.Done()` closes on actual backend termination; it does not poll process
+state or probe health. `Handle.ExitResult()` returns the immutable result once
+Done closes, including ExitCode (-1 for a signal or an unavailable numeric
+code), Err, and ExitedAt. The default gRPC preset observes Hashicorp's existing
+Runner.Wait completion; it does not call exec.Cmd.Wait a second time. Custom
+gRPC Plugins that replace the preset do not provide these notifications.
+WASM loaders receive WASMClientConfig.ReportExit and must report actual module
+termination (including code 0), never ordinary invocation failures.
+
+A failed startup rolls back with a five-second cleanup budget. If cleanup
+cannot finish, the returned error contains a *RollbackError; use errors.As to
+retrieve its Handle and retry Handle.Close before loading a replacement.

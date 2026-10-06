@@ -18,6 +18,7 @@ type Handle struct {
 
 	tmpRoot string
 	cleanup func(context.Context) error
+	exit    *exitState
 
 	unloader    func(string) error
 	closeOnce   sync.Once

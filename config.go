@@ -91,6 +91,9 @@ type WASMClientConfig struct {
 
 	// ModuleConfig configures the WebAssembly module instance.
 	ModuleConfig wazero.ModuleConfig
+
+	// ReportExit reports actual module termination; it is safe to call once or repeatedly.
+	ReportExit ReportExit
 }
 
 type Info struct {
@@ -103,6 +106,7 @@ type Info struct {
 }
 
 type backendLoadResult struct {
+	exit    *exitState
 	client  any
 	cleanup func(context.Context) error
 }

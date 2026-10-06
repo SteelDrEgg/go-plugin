@@ -23,6 +23,7 @@ func (m *Manager) loadWASM(ctx context.Context, info Info, pluginRoot string) (b
 		return backendLoadResult{}, err
 	}
 
+	exit := newExitState()
 	clientCfg := defaultWASMClientConfig()
 	if m.cfg.WASM.ClientConfigOverride != nil {
 		m.cfg.WASM.ClientConfigOverride(clientCfg)
@@ -34,8 +35,10 @@ func (m *Manager) loadWASM(ctx context.Context, info Info, pluginRoot string) (b
 		return backendLoadResult{}, fmt.Errorf("wasm ModuleConfig is required")
 	}
 
+	clientCfg.ReportExit = exit.finish
 	client, cleanup, err := m.cfg.WASM.Loader(ctx, modulePath, info, clientCfg)
 	return backendLoadResult{
+		exit:    exit,
 		client:  client,
 		cleanup: cleanup,
 	}, err

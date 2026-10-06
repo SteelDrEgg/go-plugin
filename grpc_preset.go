@@ -16,6 +16,7 @@ type grpcPresetPlugin struct {
 	loader           func(context.Context, *grpc.ClientConn) (any, error)
 	loaderWithBroker func(context.Context, *GRPCBroker, *grpc.ClientConn) (any, error)
 	loadCtx          context.Context
+	observeExit      func(context.Context)
 }
 
 func (p *grpcPresetPlugin) GRPCServer(*hcplugin.GRPCBroker, *grpc.Server) error {
@@ -23,6 +24,9 @@ func (p *grpcPresetPlugin) GRPCServer(*hcplugin.GRPCBroker, *grpc.Server) error 
 }
 
 func (p *grpcPresetPlugin) GRPCClient(ctx context.Context, broker *hcplugin.GRPCBroker, conn *grpc.ClientConn) (any, error) {
+	if p.observeExit != nil {
+		p.observeExit(ctx)
+	}
 	// The loader's startup context carries caller values and deadlines, and
 	// also stops if the backend exits. It must not be retained after startup.
 	loaderCtx, cancel := context.WithCancel(p.loadCtx)

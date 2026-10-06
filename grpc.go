@@ -41,9 +41,11 @@ func (m *Manager) loadGRPC(ctx context.Context, info Info, pluginRoot string) (b
 		return backendLoadResult{}, err
 	}
 
+	var exit *exitState
+	plugins := defaultGRPCPreset(ctx, cfg)
 	clientCfg := &hcplugin.ClientConfig{
 		HandshakeConfig:  toHCHandshake(cfg.HandshakeConfig),
-		Plugins:          defaultGRPCPreset(ctx, cfg),
+		Plugins:          plugins,
 		Cmd:              cmd,
 		AllowedProtocols: toHCProtocols(cfg.AllowedProtocols),
 		SkipHostEnv:      cfg.SkipHostEnv,
@@ -57,6 +59,14 @@ func (m *Manager) loadGRPC(ctx context.Context, info Info, pluginRoot string) (b
 	}
 	if cfg.ClientConfigOverride != nil {
 		cfg.ClientConfigOverride(clientCfg)
+	}
+	for _, plugin := range clientCfg.Plugins {
+		if preset, ok := plugin.(*grpcPresetPlugin); ok {
+			if exit == nil {
+				exit = newExitState()
+			}
+			preset.observeExit = func(lifetime context.Context) { exit.observeProcess(lifetime, clientCfg.Cmd) }
+		}
 	}
 	dispenseName := resolveDispenseName(clientCfg.Plugins)
 	if dispenseName == "" {
@@ -79,6 +89,7 @@ func (m *Manager) loadGRPC(ctx context.Context, info Info, pluginRoot string) (b
 	}
 
 	return backendLoadResult{
+		exit:    exit,
 		client:  raw,
 		cleanup: cleanup,
 	}, nil

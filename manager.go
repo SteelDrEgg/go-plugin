@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 )
 
 type Manager struct {
@@ -24,6 +25,7 @@ func (m *Manager) Load(path string) (*Handle, error) {
 
 // LoadContext loads a package using ctx for preparation and backend startup.
 // Cancellation after a successful load does not close the plugin.
+// A failed rollback returns a RollbackError retaining its handle for cleanup retries.
 func (m *Manager) LoadContext(ctx context.Context, path string) (*Handle, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -73,17 +75,20 @@ func (m *Manager) loadPrepared(ctx context.Context, info Info, source, pluginRoo
 		root:     pluginRoot,
 		tmpRoot:  tmpRoot,
 		cleanup:  loadRes.cleanup,
+		exit:     loadRes.exit,
 		unloader: removeDir,
 	}
 	if err != nil {
 		// Rollback must still run when the startup context has been cancelled.
-		if closeErr := h.Close(context.WithoutCancel(ctx)); closeErr != nil {
+		rollbackCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		if closeErr := h.Close(rollbackCtx); closeErr != nil {
 			if tmpRoot != "" {
 				closeErr = fmt.Errorf("rollback plugin (temporary directory %q retained): %w", tmpRoot, closeErr)
 			} else {
 				closeErr = fmt.Errorf("rollback plugin %q: %w", source, closeErr)
 			}
-			return nil, errors.Join(err, closeErr)
+			return nil, &RollbackError{Handle: h, Cause: errors.Join(err, closeErr)}
 		}
 		return nil, err
 	}
@@ -113,3 +118,13 @@ func (m *Manager) loadByType(ctx context.Context, info Info, pluginRoot string) 
 		return backendLoadResult{}, fmt.Errorf("unsupported plugin type %q", info.Type)
 	}
 }
+
+// RollbackError retains a backend whose startup rollback did not finish.
+// The caller must clean Handle before loading a replacement instance.
+type RollbackError struct {
+	Handle *Handle
+	Cause  error
+}
+
+func (e *RollbackError) Error() string { return e.Cause.Error() }
+func (e *RollbackError) Unwrap() error { return e.Cause }
